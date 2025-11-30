@@ -15,9 +15,7 @@
 
 %% BEHAVIORS
 -export([
-  init/3,
-  rest_init/2,
-  terminate/3,
+  init/2,
   content_types_provided/2,
   content_types_accepted/2,
   allowed_methods/2
@@ -28,9 +26,7 @@
 
 -include("erbid.hrl").
 
-%%-spec init({TransportName, ProtocolName}, Req, Options) ->
-%%  {upgrade, protocol, cowboy_rest} | {upgrade, protocol, cowboy_rest, Req, Options}.
-init({TransportName, ProtocolName}, Req, Options) ->
+init(Req, Options) ->
   DbRef = proplists:get_value(listingsTable, Options),
   HashidsCtx = proplists:get_value(hashidsCtx, Options),
   SessionsTable = proplists:get_value(sessions, Options),
@@ -38,16 +34,9 @@ init({TransportName, ProtocolName}, Req, Options) ->
   State = #{dbRef => DbRef,
             hashidsCtx => HashidsCtx,
             sessions => SessionsTable},
-  erlang:display("init/3"),
+  erlang:display("init/2"),
 
-  {upgrade, protocol, cowboy_rest, Req, State}.
-
-rest_init(Req, State) ->
-  erlang:display("rest_init"),
-  {ok, Req, State}.
-
-terminate(_Reason, Req, State) ->
-  ok.
+  {cowboy_rest, Req, State}.
 
 allowed_methods(Req, State) ->
   erlang:display("allowed_methods"),
@@ -73,7 +62,7 @@ to_html(Req, State) -> to_json(Req, State).
 to_json(Req, State) ->
   erlang:display("to_json"),
 
-  {Id, _} = cowboy_req:binding(id, Req),
+  Id = cowboy_req:binding(id, Req),
   erlang:display(Id),
   if
     Id =:= undefined ->
@@ -90,7 +79,7 @@ to_json(Req, State) ->
 
 create_listing(Req, State) ->
   erlang:display("create_listing"),
-  {ok, Body, _} = cowboy_req:body(Req),
+  {ok, Body, _} = cowboy_req:read_body(Req),
 
   try erbid_http:get_user(Req, State) of
     {error, Reason} ->
@@ -142,7 +131,8 @@ create_listing(Req, State) ->
   end.
 
 query_for_listings(Req, State) ->
-  {Query, _} = cowboy_req:qs_val(<<"q">>, Req),
+  QsVals = cowboy_req:parse_qs(Req),
+  Query = proplists:get_value(<<"q">>, QsVals, undefined),
 
   {ok, DbRef} = maps:find(dbRef, State),
 

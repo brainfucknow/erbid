@@ -15,13 +15,13 @@
 -import(jsx, [is_json/1, encode/1, decode/2]).
 
 %% Cowboy behavior
--export([init/3, handle/2, terminate/3]).
+-export([init/2]).
 
 
 -include("erbid.hrl").
 -record(state, {bidders}).
 
-init(_Type, Req, Options) ->
+init(Req, Options) ->
   Ctx = proplists:get_value(hashidsCtx, Options),
 
   DbRef = proplists:get_value(usersTable, Options),
@@ -37,31 +37,25 @@ init(_Type, Req, Options) ->
     listingsTable => ListingsTableRef,
     bidsTable => BidsTableRef
   },
-  {ok, Req, State}.
+  ActionName = cowboy_req:binding(actionName, Req),
 
-handle(Req, State) ->
-  {ActionName, _} = cowboy_req:binding(actionName, Req),
-
-  {ok, Req2} = case ActionName of
+  Req2 = case ActionName of
     <<"login">> -> handle_login(Req, State);
     <<"logout">> -> handle_logout(Req, State);
     <<"signup">> -> handle_signup(Req, State);
     <<"placeBid">> -> place_bid(Req, State);
     _ -> cowboy_req:reply(400,
-            [
-              {<<"content-type">>, <<"text/plain">>}
-            ],
+            #{
+              <<"content-type">> => <<"text/plain">>
+            },
             <<"Invalid API call">>,
             Req)
   end,
   {ok, Req2, State}.
 
-terminate(_Reason, Req, State) ->
-  ok.
-
 %% PRIVATE HANDLERS
 handle_signup(Req, State) ->
-  {ok, Data, _} = cowboy_req:body(Req),
+  {ok, Data, _} = cowboy_req:read_body(Req),
   case jsx:is_json(Data) of
     false -> json(400, <<"Invalid JSON">>, Req);
     true ->
@@ -105,7 +99,7 @@ register_new_user(UserRegForm, DbRef) ->
 
 handle_login(Req, State) ->
   erlang:display("[handle_login] Starting"),
-  {ok, Data, _} = cowboy_req:body(Req),
+  {ok, Data, _} = cowboy_req:read_body(Req),
   case jsx:is_json(Data) of
     false -> json(400, <<"Invalid JSON">>, Req);
     true -> Credential = jsx:decode(Data, [return_maps]),
@@ -143,9 +137,9 @@ handle_login(Req, State) ->
 
 handle_logout(Req, State) ->
   cowboy_req:reply(200,
-    [
-      {<<"content-type">>, <<"application/json">>}
-    ],
+    #{
+      <<"content-type">> => <<"application/json">>
+    },
     <<"logout() OK">>,
     Req).
 
@@ -157,7 +151,7 @@ place_bid(Req, State) ->
 
   {user, Username} = erbid_http:get_user(Req, State),
 
-  {ok, Data, _} = cowboy_req:body(Req),
+  {ok, Data, _} = cowboy_req:read_body(Req),
   %% TODO Is JSON?
 
   #{<<"listing_id">> := ListingId,
@@ -195,9 +189,9 @@ place_bid(Req, State) ->
 
 json(Status, Body, Req) ->
   cowboy_req:reply(Status,
-    [
-      {<<"content-type">>, <<"application/json">>}
-    ],
+    #{
+      <<"content-type">> => <<"application/json">>
+    },
     jsx:encode(Body),
     Req).
 
